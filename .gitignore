@@ -1,0 +1,12 @@
+.tooling/
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.iml
+.idea/
+*.jks
+*.keystore
+tmp/*
+!tmp/.gitkeep
+__pycache__/
