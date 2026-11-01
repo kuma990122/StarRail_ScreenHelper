@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.screenhelper.model.Memo
+import com.screenhelper.bootstrap.appContainer
+import com.screenhelper.data.platform.media.PetSound
 import com.screenhelper.presentation.memo.viewmodel.MemoViewModel
 import com.screenhelper.presentation.theme.*
 import java.text.SimpleDateFormat
@@ -21,13 +23,15 @@ import java.util.*
 
 @Composable
 fun MemoScreen(vm: MemoViewModel, requestExact: () -> Unit) {
+    val app = LocalContext.current.appContainer
+    LaunchedEffect(Unit) { app.sounds.play(PetSound.TODO) }
     val memos by vm.memos.collectAsStateWithLifecycle()
     var showCompleted by remember { mutableStateOf(false) }
     var editor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Memo?>(null) }
     val visible = memos.filter { it.completed == showCompleted }.sortedBy { it.dueAt }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { PageHeading("LITTLE PLANS", "把小事，交给我记着", "连点桌宠三次，也可以来到这里。") }
+        item { PageHeading("LITTLE PLANS", "把小事，交给我记着", "提醒时双击桌宠，也可以来到这里。") }
         item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             FilterChip(selected = !showCompleted, onClick = { showCompleted = false }, label = { Text("待完成") })
             Spacer(Modifier.width(8.dp))

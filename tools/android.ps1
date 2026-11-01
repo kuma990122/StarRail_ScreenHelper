@@ -128,7 +128,9 @@ switch ($Task) {
         Start-Sleep -Seconds 10
         & $taskAdb shell dumpsys meminfo com.screenhelper | Set-Content tmp/metrics/overlay-memory.txt -Encoding UTF8
         & $taskAdb shell top -b -n 1 -p $(& $taskAdb shell pidof com.screenhelper) | Set-Content tmp/metrics/overlay-cpu.txt -Encoding UTF8
-        & $taskAdb shell run-as com.screenhelper am stopservice --user 0 -n com.screenhelper/.presentation.pet.PetService
+        # am writes its successful "Service stopped" response to stderr on API 35.
+        # Merge on the device so PowerShell does not treat successful cleanup as a failure.
+        & $taskAdb shell 'run-as com.screenhelper am stopservice --user 0 -n com.screenhelper/.presentation.pet.PetService 2>&1'
         & $taskAdb shell am start -W -n com.screenhelper/.presentation.MainActivity
         Get-Item app/build/outputs/apk/debug/app-debug.apk | Select-Object Name,Length | ConvertTo-Json | Set-Content tmp/metrics/apk-size.json -Encoding UTF8
     }

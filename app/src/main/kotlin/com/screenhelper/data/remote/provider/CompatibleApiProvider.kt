@@ -25,8 +25,10 @@ class CompatibleApiProvider(private val client: OkHttpClient) {
         require(endpoint.model.isNotBlank()) { "请填写模型名称" }
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", input.system))
         input.turns.forEach { turn ->
-            val content: Any = if (turn.imagePath != null) {
-                val file = File(turn.imagePath)
+            val content: Any = if (turn.hasImages) {
+                val parts = JSONArray().put(JSONObject().put("type", "text").put("text", turn.text))
+                turn.images.forEach { path ->
+                val file = File(path)
                 require(file.length() <= 6 * 1024 * 1024) { "图片过大，请重新选择较小的图片" }
                 val mime = when (file.extension.lowercase()) {
                     "png" -> "image/png"
@@ -35,8 +37,10 @@ class CompatibleApiProvider(private val client: OkHttpClient) {
                     else -> "image/jpeg"
                 }
                 val encoded = file.readBytes().toByteString().base64()
-                JSONArray().put(JSONObject().put("type", "text").put("text", turn.text))
-                    .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:$mime;base64,$encoded")))
+                parts.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:$mime;base64,$encoded")))
+                }
+                turn.imageUrls.forEach { url -> parts.put(JSONObject().put("type","image_url").put("image_url", JSONObject().put("url", url))) }
+                parts
             } else turn.text
             messages.put(JSONObject().put("role", turn.role).put("content", content))
         }

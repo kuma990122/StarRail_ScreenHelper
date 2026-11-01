@@ -8,6 +8,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,10 +28,17 @@ private fun EndpointEditor(title: String, endpoint: EndpointConfig, change: (End
 @Composable
 fun SettingsScreen(vm: SettingsViewModel, petRunning: Boolean, togglePet: () -> Unit, requestNotifications: () -> Unit, requestExact: () -> Unit) {
     val saved by vm.settings.collectAsStateWithLifecycle()
+    val soundEffects by vm.soundEffects.collectAsStateWithLifecycle()
     var editing by remember(saved) { mutableStateOf(saved) }
     var advanced by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PageHeading("MAKE IT YOURS", "陪伴的偏好", "你的角色、你的模型、你的节奏。")
+        Panel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("全局音效", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Switch(soundEffects, vm::setSoundEffects, Modifier.testTag("sound_effects").semantics { contentDescription="全局音效开关" })
+            }
+        }
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("离线演示", style = MaterialTheme.typography.titleMedium); Text("使用本地示例回复，不产生 API 费用", color = Muted, style = MaterialTheme.typography.bodySmall) }; Switch(editing.demoMode, { editing = editing.copy(demoMode = it) }, Modifier.testTag("demo_mode")) }
             EndpointEditor("文本模型", editing.text) { editing = editing.copy(text = it) }
@@ -40,7 +49,7 @@ fun SettingsScreen(vm: SettingsViewModel, petRunning: Boolean, togglePet: () -> 
                 EndpointEditor("视觉模型（可选）", editing.vision) { editing = editing.copy(vision = it) }
                 EndpointEditor("语音转写模型（可选）", editing.speech) { editing = editing.copy(speech = it) }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("触摸桌宠时生成对话", Modifier.weight(1f)); Switch(editing.touchTalk, { editing = editing.copy(touchTalk = it) }) }
+            Text("单击桌宠轻声回应；双击进入主页，提醒时双击进入待办。",style=MaterialTheme.typography.bodySmall,color=Muted)
             Button(onClick = { vm.save(editing) }, Modifier.fillMaxWidth().testTag("save_settings")) { Text("保存设置") }
         }
         Panel {
@@ -48,8 +57,8 @@ fun SettingsScreen(vm: SettingsViewModel, petRunning: Boolean, togglePet: () -> 
             OutlinedButton(onClick = togglePet, modifier = Modifier.fillMaxWidth()) { Text(if (petRunning) "收起桌宠" else "开启桌宠悬浮窗") }
             TextButton(onClick = requestNotifications) { Text("允许待办通知") }
             TextButton(onClick = requestExact) { Text("允许精确提醒") }
-            Text("截屏每次需要你主动授权；所有聊天、立绘与备忘保存在应用私有目录。向 API 发送消息时会包含当前角色设定与有限的历史记忆。", style = MaterialTheme.typography.bodySmall, color = Muted)
+            Text("单帧截屏和持续屏幕互动均需主动授权。屏幕互动在对话页开启和停止；聊天、立绘与备忘保存在应用私有目录。向 API 发送消息时会包含当前角色设定与有限历史记忆。", style = MaterialTheme.typography.bodySmall, color = Muted)
         }
-        Text("栖伴 · ScreenHelper 0.1.0", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text("迷迷 · ScreenHelper 0.2.0", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }

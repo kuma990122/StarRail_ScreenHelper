@@ -7,6 +7,12 @@ import com.screenhelper.bootstrap.receiver.ReminderReceiver
 import com.screenhelper.business.character.CharacterService
 import com.screenhelper.business.conversation.ConversationService
 import com.screenhelper.business.memory.MemoryService
+import com.screenhelper.business.memory.DailyMemoryService
+import com.screenhelper.business.memory.DailyArchiveScheduler
+import com.screenhelper.business.conversation.ContextBuilder
+import com.screenhelper.business.pet.PetAction
+import com.screenhelper.data.local.files.PetAssets
+import java.io.File
 import com.screenhelper.business.memo.MemoService
 import com.screenhelper.business.relationship.RelationshipService
 import com.screenhelper.data.local.database.AppDatabase
@@ -34,10 +40,14 @@ class ScreenHelperApp : Application() {
 
 class AppContainer(context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    val database = Room.databaseBuilder(context, AppDatabase::class.java, "screenhelper.db").build()
+    val database = Room.databaseBuilder(context, AppDatabase::class.java, "screenhelper.db").addMigrations(AppDatabase.MIGRATION_1_2).build()
     val local = LocalRepository(database)
     val settings = SettingsRepository(context)
+    val sounds = com.screenhelper.data.platform.media.PetSoundPlayer(context, settings.soundEffects, scope)
     val assets = AssetStore(context)
+    val petAssets = PetAssets(context)
+    val dailyMemory = DailyMemoryService(local, File(context.filesDir, "daily-archives"))
+    val screenWatch = MutableStateFlow(ScreenWatchState())
     val notifications = NotificationPresenter(context)
     val scheduler = ReminderScheduler(context, ReminderReceiver::class.java)
     val http = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS).retryOnConnectionFailure(false).build()
@@ -52,12 +62,39 @@ class AppContainer(context: Context) {
     private var petVisible = false
     private var engagementTicker: Job? = null
     val memo = MemoService(local, scheduler, { value ->
-        if (PetService.isRunning) showBubble("到时间啦：${value.title}", Emotion.HAPPY) else notifications.remind(value)
+        sounds.play(com.screenhelper.data.platform.media.PetSound.TODO)
+        if (PetService.isRunning) showReminder(value) else notifications.remind(value)
     })
     val conversation = ConversationService(scope, local, ai, relationship, memory, ::showBubble)
-    val ready = scope.async { local.initialize(); memo.restore() }
+    val screenInteraction = com.screenhelper.business.screen.ScreenInteractionService(local,ai,petState)
+    val ready = scope.async {
+        local.initialize()
+        petAssets.install()
+        ContextBuilder.mimiSkill = context.assets.open("skills/mimi.md").bufferedReader().use { it.readText() }
+        val default = local.character("default")
+        if (default.name == "小栖" || (default.name == "迷迷" && default.assets.isEmpty())) {
+            local.saveCharacter(default.copy(name = "迷迷", subtitle = "把相遇写进记忆，一起走过逐火之旅♪",
+                personality = "温柔、俏皮、共情且坚韧，偶尔以 ♪ 结尾。", world = "翁法罗斯，逐火之旅的世界。", backstory = "昔涟幼小的忆灵形态，在陪伴中积累情感与记忆。",
+                assets = if (default.assets.isEmpty()) mapOf(Emotion.NEUTRAL to petAssets.path(PetAction.IDLE)) else default.assets))
+        }
+        memo.restore()
+        DailyArchiveScheduler.schedule(context)
+    }
 
     init {
+        scope.launch {
+            ready.await()
+            runCatching { dailyMemory.archiveCompletedDays() }
+            var archivedDay = java.time.LocalDate.now()
+            while (isActive) {
+                delay(60_000)
+                val today = java.time.LocalDate.now()
+                if(today != archivedDay) {
+                    val result = runCatching { dailyMemory.archiveCompletedDays() }
+                    if(result.isSuccess) archivedDay=today
+                }
+            }
+        }
         scope.launch {
             ready.await()
             combine(local.characters, settings.selectedCharacter) { profiles, id -> profiles.firstOrNull { it.id == id } ?: profiles.firstOrNull() ?: CharacterProfile() }
@@ -65,7 +102,10 @@ class AppContainer(context: Context) {
         }
     }
     fun showBubble(text: String, emotion: Emotion = Emotion.NEUTRAL) {
-        petState.update { it.copy(bubble = text, emotion = emotion, bubbleId = System.nanoTime()) }
+        petState.update { it.copy(bubble = text, emotion = emotion, bubbleId = System.nanoTime(), reminderId = null) }
+    }
+    fun showReminder(memo: Memo) {
+        petState.update { it.copy(bubble = "到时间啦：${memo.title}", emotion = Emotion.HAPPY, bubbleId = System.nanoTime(), reminderId = memo.id) }
     }
     @Synchronized
     fun presence(activity: Boolean? = null, pet: Boolean? = null) {

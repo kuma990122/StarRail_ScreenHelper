@@ -25,7 +25,7 @@ class RestoreReceiver : BroadcastReceiver() {
         val pending = goAsync()
         val app = context.appContainer
         app.scope.launch {
-            try { app.ready.await(); app.memo.restore() }
+            try { app.ready.await(); app.memo.restore(); com.screenhelper.business.memory.DailyArchiveScheduler.schedule(context); app.dailyMemory.archiveCompletedDays() }
             finally { pending.finish() }
         }
     }

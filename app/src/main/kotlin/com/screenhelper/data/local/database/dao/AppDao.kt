@@ -6,6 +6,15 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AppDao {
+    @Query("SELECT * FROM messages WHERE characterId=:id AND createdAt>=:start AND createdAt<:end AND status!='streaming' ORDER BY createdAt")
+    suspend fun dayMessages(id: String, start: Long, end: Long): List<MessageEntity>
+    @Query("SELECT characterId, createdAt FROM messages WHERE role='user' AND createdAt<:before ORDER BY createdAt")
+    suspend fun memoryDates(before: Long): List<MemoryDate>
+    @Query("SELECT * FROM daily_memories WHERE characterId=:id ORDER BY day DESC")
+    fun dailyMemories(id: String): Flow<List<DailyMemoryEntity>>
+    @Query("SELECT * FROM daily_memories WHERE characterId=:id AND day=:day")
+    suspend fun dailyMemory(id: String, day: String): DailyMemoryEntity?
+    @Upsert suspend fun saveDailyMemory(value: DailyMemoryEntity)
     @Query("SELECT * FROM characters ORDER BY name") fun characters(): Flow<List<CharacterEntity>>
     @Query("SELECT * FROM characters WHERE id=:id") suspend fun character(id: String): CharacterEntity?
     @Upsert suspend fun saveCharacter(value: CharacterEntity)
@@ -38,3 +47,5 @@ interface AppDao {
     @Upsert suspend fun saveMemory(value: MemoryEntity)
     @Query("DELETE FROM memories WHERE id=:id") suspend fun deleteMemory(id: String)
 }
+
+data class MemoryDate(val characterId: String, val createdAt: Long)

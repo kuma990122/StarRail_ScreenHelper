@@ -21,7 +21,7 @@ class AiRepository(private val settings: SettingsRepository, private val provide
                 else -> Emotion.NEUTRAL
             }
             val reply = when {
-                input.turns.lastOrNull()?.imagePath != null -> "收到你的图片啦。在演示模式里，我会保留这张图片；配置视觉 API 后，我们就能一起聊聊里面的细节。"
+                input.turns.lastOrNull()?.hasImages == true -> "收到画面啦♪ 演示模式只验证流程，配置视觉模型后，我就能陪你看看屏幕上的小故事。"
                 text.startsWith("记住") -> "好，我会把这件小事收进我们的共同记忆。下次聊天，也会带上它。"
                 emotion == Emotion.SAD -> "听起来，今天有一点难熬。先慢慢呼吸一下吧，我在这里。想和我说说发生了什么吗？"
                 emotion == Emotion.ANGRY -> "嗯，我听见你的不开心了。我们先把事情放慢一点，一起理清楚，好吗？"
@@ -32,7 +32,7 @@ class AiRepository(private val settings: SettingsRepository, private val provide
             for (chunk in reply.chunked(3)) { emit(AiEvent.Text(chunk)); delay(24) }
             emit(AiEvent.Feeling(emotion))
         } else {
-            val hasImage = input.turns.any { it.imagePath != null }
+            val hasImage = input.turns.any { it.hasImages }
             val endpoint = if (hasImage && config.vision.model.isNotBlank()) config.vision else config.text
             require(!hasImage || config.vision.model.isNotBlank() || config.textSupportsImages) { "请在设置中配置视觉模型，或确认当前文本模型支持图片" }
             emitAll(provider.stream(endpoint, input, maxTokens))

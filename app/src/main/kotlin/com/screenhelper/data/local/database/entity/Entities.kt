@@ -59,3 +59,7 @@ data class MemoryEntity(
     val text: String,
     val createdAt: Long,
 )
+
+@Entity(tableName = "daily_memories", primaryKeys = ["characterId", "day"])
+data class DailyMemoryEntity(val characterId: String, val day: String, val summary: String, val sourceHash: String,
+    val messageCount: Int, val archivePath: String, val generatedAt: Long, val timezone: String)
