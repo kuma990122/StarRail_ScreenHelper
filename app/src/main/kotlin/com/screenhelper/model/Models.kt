@@ -9,8 +9,8 @@ enum class Emotion(val label: String) {
 
 data class CharacterProfile(
     val id: String = "default",
-    val name: String = "小栖",
-    val subtitle: String = "来自星灯岛的信使",
+    val name: String = "迷迷",
+    val subtitle: String = "把相遇写进记忆，一起走过逐火之旅♪",
     val personality: String = "温柔、好奇，偶尔有一点俏皮。尊重对方的节奏，关心具体的小事。",
     val world: String = "星灯岛漂浮在云海之上，每一盏星灯都收藏着一个人的日常。",
     val backstory: String = "为了收集那些微小却闪亮的故事，小栖带着星灯来到你的桌面。",
@@ -72,7 +72,10 @@ data class AppSettings(
     val touchTalk: Boolean = true,
 )
 
-data class ModelTurn(val role: String, val text: String, val imagePath: String? = null)
+data class ModelTurn(val role: String, val text: String, val imagePath: String? = null, val imagePaths: List<String> = emptyList(), val imageUrls: List<String> = emptyList()) {
+    val images get() = listOfNotNull(imagePath) + imagePaths
+    val hasImages get() = images.isNotEmpty() || imageUrls.isNotEmpty()
+}
 data class ModelRequest(val system: String, val turns: List<ModelTurn>)
 sealed interface AiEvent {
     data class Text(val value: String) : AiEvent
@@ -89,5 +92,12 @@ data class PetState(
     val emotion: Emotion = Emotion.NEUTRAL,
     val bubble: String = "今天，也一起慢慢来吧。",
     val bubbleId: Long = 0,
+    val reminderId: String? = null,
 )
+
+data class DailyMemory(val characterId: String, val day: String, val summary: String, val sourceHash: String,
+    val messageCount: Int, val archivePath: String, val generatedAt: Long, val timezone: String)
+
+data class ScreenWatchState(val running: Boolean = false, val frames: Int = 0, val busy: Boolean = false,
+    val message: String = "屏幕互动未开启")
 data class CaptureResult(val path: String? = null, val error: String? = null)

@@ -10,3 +10,6 @@ local.properties
 tmp/*
 !tmp/.gitkeep
 __pycache__/
+/docs/
+/app/src/test/
+/app/src/androidTest/

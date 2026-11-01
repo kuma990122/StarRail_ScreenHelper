@@ -9,6 +9,12 @@ import org.json.JSONObject
 
 class LocalRepository(private val database: AppDatabase) {
     private val dao = database.dao()
+    suspend fun dayMessages(id: String, start: Long, end: Long) = dao.dayMessages(id, start, end).map { it.model() }
+    suspend fun memoryDates(before: Long) = dao.memoryDates(before)
+    fun dailyMemories(id: String) = dao.dailyMemories(id).map { list -> list.map { it.model() } }
+    suspend fun dailyMemory(id: String, day: String) = dao.dailyMemory(id, day)?.model()
+    suspend fun saveDailyMemory(m: DailyMemory) = dao.saveDailyMemory(DailyMemoryEntity(m.characterId,m.day,m.summary,m.sourceHash,m.messageCount,m.archivePath,m.generatedAt,m.timezone))
+    private fun DailyMemoryEntity.model() = DailyMemory(characterId,day,summary,sourceHash,messageCount,archivePath,generatedAt,timezone)
     val characters = dao.characters().map { values -> values.map { it.model() } }
     val memos = dao.memos().map { values -> values.map { it.model() } }
     suspend fun initialize() {

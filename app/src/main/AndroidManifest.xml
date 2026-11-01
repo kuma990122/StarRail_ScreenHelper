@@ -12,6 +12,7 @@
     <application
         android:name=".bootstrap.ScreenHelperApp"
         android:allowBackup="false"
+        android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
@@ -29,6 +30,8 @@
         </service>
         <service android:name=".data.platform.media.ScreenCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
         <receiver android:name=".bootstrap.receiver.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".business.memory.DailyArchiveReceiver" android:exported="false" />
+        <receiver android:name=".presentation.notification.StopScreenReceiver" android:exported="false" />
         <receiver android:name=".bootstrap.receiver.RestoreReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

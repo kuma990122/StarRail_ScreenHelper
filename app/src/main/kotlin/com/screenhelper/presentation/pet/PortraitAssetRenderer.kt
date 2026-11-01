@@ -8,7 +8,6 @@ import android.graphics.RectF
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.BitmapDrawable
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -19,6 +18,7 @@ import java.io.File
 internal class PortraitAssetRenderer(
     private val invalidate: () -> Unit,
     private val maxDimension: Int,
+    private val trimTransparent: Boolean = false,
 ) : Drawable.Callback {
     private val main = Handler(Looper.getMainLooper())
     private var currentPath: String? = null
@@ -29,6 +29,8 @@ internal class PortraitAssetRenderer(
     private var attached = false
     private var movieScheduled = false
     private var movieStartedAt = 0L
+    private val bitmapBounds = RectF()
+    private var contentBounds = RectF(0f, 0f, 1f, 1f)
     private val movieFrame = object : Runnable {
         override fun run() {
             if (!attached || movie == null) return
@@ -46,12 +48,18 @@ internal class PortraitAssetRenderer(
         if (path == null) { invalidate(); return }
         Thread({
             val decoded = runCatching { decode(File(path)) }.getOrNull()
+            val crop = if(trimTransparent) runCatching {
+                val values = File(path).resolveSibling(File(path).nameWithoutExtension + ".bounds").readText().split(',').map { it.toFloat() }
+                require(values.size == 4 && values.all { it in 0f..1f } && values[2] > values[0] && values[3] > values[1])
+                RectF(values[0], values[1], values[2], values[3])
+            }.getOrDefault(RectF(0f, 0f, 1f, 1f)) else RectF(0f, 0f, 1f, 1f)
             main.post {
                 if (request != generation) {
                     decoded?.bitmap?.recycle()
                     return@post
                 }
                 bitmap = decoded?.bitmap
+                contentBounds = crop
                 movie = decoded?.movie
                 drawable = decoded?.drawable?.also { it.callback = this }
                 movieStartedAt = SystemClock.uptimeMillis()
@@ -85,7 +93,23 @@ internal class PortraitAssetRenderer(
         clearDecoded()
     }
 
-    fun draw(canvas: Canvas, bounds: RectF, emotion: Emotion) {
+    fun draw(canvas: Canvas, bounds: RectF, emotion: Emotion, edgeX: Int = 0, edgeY: Int = 0) {
+        val sourceWidth = (bitmap?.width ?: movie?.width() ?: drawable?.intrinsicWidth ?: 1).coerceAtLeast(1).toFloat()
+        val sourceHeight = (bitmap?.height ?: movie?.height() ?: drawable?.intrinsicHeight ?: 1).coerceAtLeast(1).toFloat()
+        val crop = contentBounds
+        val scale = minOf(bounds.width() / (sourceWidth * crop.width()), bounds.height() / (sourceHeight * crop.height()))
+        val width = sourceWidth * scale
+        val height = sourceHeight * scale
+        val left = when { edgeX < 0 -> bounds.left; edgeX > 0 -> bounds.right - width * crop.width(); else -> bounds.centerX() - width * crop.width() / 2 }
+        val top = when { edgeY < 0 -> bounds.top; edgeY > 0 -> bounds.bottom - height * crop.height(); else -> bounds.centerY() - height * crop.height() / 2 }
+        val target = RectF(left - width * crop.left, top - height * crop.top, left + width * (1-crop.left), top + height * (1-crop.top))
+        canvas.save()
+        canvas.clipRect(bounds)
+        drawContent(canvas, target, emotion)
+        canvas.restore()
+    }
+
+    private fun drawContent(canvas: Canvas, bounds: RectF, emotion: Emotion) {
         val image = bitmap
         val animation = movie
         val imageDrawable = drawable
@@ -116,7 +140,7 @@ internal class PortraitAssetRenderer(
     private fun decode(file: File): Decoded? {
         if (!file.isFile) return null
         if (file.extension.equals("gif", true)) return Movie.decodeFile(file.path)?.let { Decoded(movie = it) }
-        if (file.extension.equals("webp", true) && Build.VERSION.SDK_INT >= 28) {
+        if (file.extension.equals("webp", true)) {
             return decodeWithImageDecoder(file)
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -127,7 +151,6 @@ internal class PortraitAssetRenderer(
         return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })?.let { Decoded(bitmap = it) }
     }
 
-    @androidx.annotation.RequiresApi(28)
     private fun decodeWithImageDecoder(file: File): Decoded? {
         val source = android.graphics.ImageDecoder.createSource(file)
         val result = android.graphics.ImageDecoder.decodeDrawable(source) { decoder, info, _ ->
@@ -145,8 +168,8 @@ internal class PortraitAssetRenderer(
         val scale = minOf(bounds.width() / image.width, bounds.height() / image.height)
         val width = image.width * scale
         val height = image.height * scale
-        val target = RectF(bounds.centerX() - width / 2, bounds.centerY() - height / 2, bounds.centerX() + width / 2, bounds.centerY() + height / 2)
-        canvas.drawBitmap(image, null, target, null)
+        bitmapBounds.set(bounds.centerX() - width / 2, bounds.centerY() - height / 2, bounds.centerX() + width / 2, bounds.centerY() + height / 2)
+        canvas.drawBitmap(image, null, bitmapBounds, null)
     }
 
     private fun drawMovie(canvas: Canvas, animation: Movie, bounds: RectF) {
@@ -164,7 +187,7 @@ internal class PortraitAssetRenderer(
         }
     }
 
-    private fun startAnimation() { (drawable as? Animatable)?.start() }
+    private fun startAnimation() { if (attached) (drawable as? Animatable)?.start() }
     private fun stopAnimation() { (drawable as? Animatable)?.stop() }
     private fun clearDecoded() {
         main.removeCallbacks(movieFrame)
@@ -182,6 +205,7 @@ internal class PortraitAssetRenderer(
 
 internal class AnimatedPortraitView(context: android.content.Context) : android.view.View(context) {
     private val renderer = PortraitAssetRenderer(::invalidate, 1024)
+    private val portraitBounds = RectF()
     private var emotion = Emotion.NEUTRAL
 
     fun show(path: String?, state: Emotion) {
@@ -194,17 +218,22 @@ internal class AnimatedPortraitView(context: android.content.Context) : android.
     fun clear() = renderer.clear()
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        renderer.draw(canvas, RectF(0f, 0f, width.toFloat(), height.toFloat()), emotion)
+        portraitBounds.set(0f, 0f, width.toFloat(), height.toFloat())
+        renderer.draw(canvas, portraitBounds, emotion)
     }
-    override fun onAttachedToWindow() { super.onAttachedToWindow(); renderer.onAttached() }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); if(windowVisibility==VISIBLE) renderer.onAttached() }
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if(visibility==VISIBLE && isAttachedToWindow) renderer.onAttached() else renderer.onDetached()
+    }
     override fun onDetachedFromWindow() { renderer.onDetached(); super.onDetachedFromWindow() }
 }
 
 internal class OverlayPortraitRenderer(invalidate: () -> Unit) : AutoCloseable {
-    private val renderer = PortraitAssetRenderer(invalidate, 512)
+    private val renderer = PortraitAssetRenderer(invalidate, 512, trimTransparent = true)
     fun show(path: String?, emotion: Emotion) { renderer.setImage(path); this.emotion = emotion }
     private var emotion = Emotion.NEUTRAL
-    fun draw(canvas: Canvas, bounds: RectF) = renderer.draw(canvas, bounds, emotion)
+    fun draw(canvas: Canvas, bounds: RectF, edgeX: Int = 0, edgeY: Int = 0) = renderer.draw(canvas, bounds, emotion, edgeX, edgeY)
     fun attach() = renderer.onAttached()
     fun detach() = renderer.onDetached()
     override fun close() = renderer.clear()

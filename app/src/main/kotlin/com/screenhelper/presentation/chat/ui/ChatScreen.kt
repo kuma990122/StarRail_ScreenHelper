@@ -35,7 +35,8 @@ import java.io.File
 import java.util.Locale
 
 @Composable
-fun ChatScreen(character: CharacterProfile, settings: AppSettings, vm: ChatViewModel, captureScreen: () -> Unit) {
+fun ChatScreen(character: CharacterProfile, settings: AppSettings, vm: ChatViewModel, captureScreen: () -> Unit,
+               watch: ScreenWatchState = ScreenWatchState(), toggleWatch: () -> Unit = {}) {
     val messages by vm.messages.collectAsStateWithLifecycle()
     val runtime by vm.runtime.collectAsStateWithLifecycle()
     val draft by vm.draft.collectAsStateWithLifecycle()
@@ -77,6 +78,10 @@ fun ChatScreen(character: CharacterProfile, settings: AppSettings, vm: ChatViewM
             Portrait(character, modifier = Modifier.size(54.dp))
             Column(Modifier.weight(1f).padding(start = 10.dp)) { Text(character.name, style = MaterialTheme.typography.titleLarge); Text(if (settings.demoMode) "离线演示 · 在这里听你说" else "${settings.text.model} · 流式对话", style = MaterialTheme.typography.bodySmall, color = Muted) }
             TextButton(onClick = { clearConfirmation = true }) { Text("清空") }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(if(watch.running) "屏幕互动 · ${watch.frames}/3 帧${if(watch.busy) " · 正在思考" else ""}" else watch.message,Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=Muted)
+            TextButton(onClick=toggleWatch,modifier=Modifier.testTag("screen_watch")) { Text(if(watch.running) "停止共享" else "屏幕互动") }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { Text("把今天的小事，慢慢说给我听。", color = Muted, style = MaterialTheme.typography.bodySmall) }
